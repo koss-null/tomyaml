@@ -8,7 +8,12 @@ Tomyaml is a Golang library aimed at parsing TOML and YAML files into Golang str
 To install Tomyaml, use `go get`:
 
 ```bash
-go get -u github.com/yourusername/tomyaml
+go get github.com/koss-null/tomyaml
+```
+
+or just import it in your project and say: 
+```bash
+go mod tidy
 ```
 
 ## Usage
