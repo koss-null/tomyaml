@@ -16,6 +16,8 @@ temperature: 25.5
 is_active: true
 is_working: FALSE
 
+birth_date = 1985-12-31T00:00:00Z
+
 // Nested objects
 [address]
   street = "123 Main Street"   # this comment does not count

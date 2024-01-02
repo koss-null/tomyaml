@@ -271,7 +271,11 @@ var (
 )
 
 func parseTOMLValue(valStr string) (value, error) {
-	var res value
+	const tomlDataLayout = "2006-01-02T00:00:00Z"
+	var (
+		parsedTime time.Time
+		res        value
+	)
 	switch {
 	case integerPattern.MatchString(valStr):
 		valueInt, err := strconv.Atoi(valStr)
@@ -306,6 +310,13 @@ func parseTOMLValue(valStr string) (value, error) {
 		res.t = Array
 	case tablePattern.MatchString(valStr):
 		res.t = Table
+	case func() bool {
+		var err error
+		parsedTime, err = time.Parse(tomlDataLayout, valStr)
+		return err == nil
+	}():
+		res.val = parsedTime
+		res.t = Datetime
 	}
 
 	if res.t == Unknown {
