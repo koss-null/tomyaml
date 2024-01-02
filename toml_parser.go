@@ -1,26 +1,26 @@
 package toml
 
 import (
+	"fmt"
 	"io"
 	"strings"
 
 	"github.com/pkg/errors"
 )
 
-type (
-	TOML struct {
-		// key represents the last part of the key (an object struct field's name)
-		key    key
-		kvs    map[key]value
-		parent *TOML
-	}
+type TOML struct {
+	// key represents the last part of the key (an object struct field's name)
+	key    key
+	kvs    map[key]value
+	parent *TOML
+}
 
+type (
 	value struct {
 		val any
 		t   ValueType
 	}
 
-	// key represents the full key: foo.bar.key
 	key string
 
 	ValueType int16
@@ -66,7 +66,7 @@ func Parse(tomlFile io.Reader) (TOML, error) {
 		}
 
 		lines[0] = savedPrefix + lines[0]
-		if err = currentObj.handleLines(lines, &toml); err != nil {
+		if err = currentObj.handleLines(lines, currentObj, &toml); err != nil {
 			return TOML{}, err
 		}
 
@@ -78,7 +78,12 @@ func Parse(tomlFile io.Reader) (TOML, error) {
 	return toml, nil
 }
 
-func (t *TOML) handleLines(lines []string, obj *TOML) error {
+// TODO: implement
+func (t *TOML) String() string {
+	return ""
+}
+
+func (t *TOML) handleLines(lines []string, obj, initial *TOML) error {
 	for _, line := range lines {
 		line = tidy(line)
 		if len(line) == 0 {
@@ -86,7 +91,7 @@ func (t *TOML) handleLines(lines []string, obj *TOML) error {
 		}
 
 		t.update(obj)
-		obj = actualizeObject(obj, line)
+		obj = actualizeObject(obj, initial, line)
 		if err := obj.putLine(line); err != nil {
 			return err
 		}
@@ -108,45 +113,7 @@ func (t *TOML) update(obj *TOML) {
 	}
 }
 
-var commentSigns = [...]string{"//", "#"}
-
-// tidy removes comments from a line, trimms spaces.
-func tidy(s string) string {
-	s = strings.TrimSpace(s)
-	for _, cs := range commentSigns {
-		s = strings.Split(s, cs)[0]
-	}
-	return s
-}
-
-// actualizeObject checks if a new object is being declared in the line.
-func actualizeObject(obj *TOML, line string) *TOML {
-	if line[0] == '[' && line[len(line)-1] == ']' {
-		fullKey := tidy(line[1 : len(line)-1])
-		lastDotIdx := strings.LastIndex(fullKey, ".")
-		actualKey := fullKey
-		if lastDotIdx != -1 {
-			actualKey = fullKey[lastDotIdx+1:]
-		}
-
-		newNode := &TOML{
-			key: key(actualKey),
-			kvs: make(map[key]value),
-		}
-		newNode.findOrMakeParent(obj, fullKey)
-		return newNode
-	}
-
-	return obj
-}
-
-func (t *TOML) findOrMakeParent(toml *TOML, fullKey string) {
-	// go to the initial parent
-	initial := toml
-	for initial.parent != nil {
-		initial = initial.parent
-	}
-
+func (t *TOML) findOrMakeParent(initial *TOML, fullKey string) {
 	keyParts := strings.Split(fullKey, ".")
 	lastKey := keyParts[len(keyParts)-1]
 	keyParts = keyParts[:len(keyParts)-1]
@@ -177,4 +144,49 @@ func (t *TOML) findOrMakeParent(toml *TOML, fullKey string) {
 		}
 		cur = preParent
 	}
+}
+
+func (v value) String() string {
+	switch v.t {
+	case Int:
+		return fmt.Sprint(v.val.(int))
+	case Float:
+		return fmt.Sprint(v.val.(float64))
+	case String:
+		// TODO: add \ before special symbols, add quotes
+		return v.val.(string)
+	}
+	return ""
+}
+
+var commentSigns = [...]string{"//", "#"}
+
+// tidy removes comments from a line, trimms spaces.
+func tidy(s string) string {
+	s = strings.TrimSpace(s)
+	for _, cs := range commentSigns {
+		s = strings.Split(s, cs)[0]
+	}
+	return s
+}
+
+// actualizeObject checks if a new object is being declared in the line.
+func actualizeObject(obj, initial *TOML, line string) *TOML {
+	if line[0] == '[' && line[len(line)-1] == ']' {
+		fullKey := tidy(line[1 : len(line)-1])
+		lastDotIdx := strings.LastIndex(fullKey, ".")
+		actualKey := fullKey
+		if lastDotIdx != -1 {
+			actualKey = fullKey[lastDotIdx+1:]
+		}
+
+		newNode := &TOML{
+			key: key(actualKey),
+			kvs: make(map[key]value),
+		}
+		newNode.findOrMakeParent(initial, fullKey)
+		return newNode
+	}
+
+	return obj
 }
