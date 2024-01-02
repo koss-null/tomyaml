@@ -3,6 +3,24 @@
 
 Tomyaml is a Golang library aimed at parsing TOML and YAML files into Golang structures. Currently, only TOML parsing is implemented. YAML parsing is underway and will be available soon.
 
+## Supported features
+
+### TOML
+
+ - `Parse(io.Reader) TOML` - parse TOML file from io.Reader into TOML structure.
+ - `TOML.Key() string` - returns TOML's object key from root.
+ - `TOML.GetObj(key string) TOML` - returns TOML object by the key from the root (key eg.: foo.bar.baz).
+ - `TOML.String() string` - returns TOML file as a string, built from a TOML structure.
+ *Currently parsing supports:*
+ - comments with `//` and `#`
+ - key-value separators with `:`, `=`
+ *Types:*
+ - `int`, `float`
+ - single-line `string`,
+ - `boolean` (*true*|*True*|*TRUE*)
+ - `datetime`
+ *Also complex object fields and relations are parsed correctley.*
+
 ## Installation
 
 To install Tomyaml, use `go get`:
