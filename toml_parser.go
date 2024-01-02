@@ -130,7 +130,12 @@ func (t *TOML) String() string {
 			bldr.WriteString(fmt.Sprintf("%q: %s\n", k, v.String()))
 			continue
 		}
-		bldr.WriteString(v.String())
+	}
+
+	for _, v := range t.kvs {
+		if v.t == InnerStruct {
+			bldr.WriteString(v.String())
+		}
 	}
 
 	return bldr.String()

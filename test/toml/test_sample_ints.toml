@@ -1,6 +1,8 @@
 # Sample TOML file with nested objects
 // only ints
 
+global: 0
+
 [person]
 name = 11 // the name is a number
 age =   25 # the age is a number also
