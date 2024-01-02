@@ -79,50 +79,86 @@ func Parse(tomlFile io.Reader) (TOML, error) {
 	return toml, nil
 }
 
-func (t *TOML) String(prefix ...string) string {
-	pref := strings.Join(prefix, "")
+// Key returns the full key of the toml object: foo.bar.baz
+func (t *TOML) Key() string {
+	parts := make([]string, 0, 3)
+	parts = append(parts, string(t.key))
+	parent := t.parent
+	for parent != nil {
+		parts = append(parts, string(parent.key))
+		parent = parent.parent
+	}
 
+	key := ""
+	for i := range parts {
+		if key == "" {
+			key = parts[i]
+			continue
+		}
+		if parts[i] == "" {
+			continue
+		}
+		key = parts[i] + "." + key
+	}
+	return key
+}
+
+// GetObj returns inner object by the key if it exists
+func (t *TOML) GetObj(fullKey string) *TOML {
+	keyParts := strings.Split(fullKey, ".")
+	cur := t
+	for _, k := range keyParts {
+		curVal, ok := cur.kvs[key(k)]
+		if !ok || curVal.t != InnerStruct {
+			return nil
+		}
+		cur = curVal.val.(*TOML)
+	}
+	return cur
+}
+
+func (t *TOML) String() string {
 	var bldr strings.Builder
 
-	if t.key != "" {
-		bldr.WriteString(fmt.Sprintf("%s[%s]\n", pref, t.key))
+	tKey := t.Key()
+	if tKey != "" {
+		bldr.WriteString("\n[" + t.Key() + "]\n")
 	}
 
 	for k, v := range t.kvs {
 		if v.t != InnerStruct {
-			bldr.WriteString(fmt.Sprintf("%s%q: %s\n", pref, k, v.String()))
+			bldr.WriteString(fmt.Sprintf("%q: %s\n", k, v.String()))
 			continue
 		}
-		bldr.WriteString(v.String("\t" + pref))
+		bldr.WriteString(v.String())
 	}
 
 	return bldr.String()
 }
 
 func (t *TOML) handleLines(lines []string, initial *TOML) (*TOML, error) {
-	obj := t
-	objChanged := false
-	for _, line := range lines {
+	for i, line := range lines {
 		line = tidy(line)
 		if len(line) == 0 {
 			continue
 		}
 
-		prevObj := obj
-		obj, objChanged = actualizeObject(obj, initial, line)
-		// if the line not like "[some.object]"
-		if objChanged {
-			prevObj.update()
-			continue
+		if lineIsAnObjectDef(line) {
+			initial.createObjPath(line[1 : len(line)-1])
+			if i < len(lines)-1 {
+				obj := initial.GetObj(line[1 : len(line)-1])
+				return obj.handleLines(lines[i+1:], initial)
+			}
+			return t, nil
 		}
-		if err := obj.putLine(line); err != nil {
-			return obj, err
+
+		if err := t.putLine(line); err != nil {
+			return t, err
 		}
 		continue
 	}
 
-	obj.update()
-	return obj, nil
+	return t, nil
 }
 
 var delimeters = [...]rune{':', '='}
@@ -158,52 +194,29 @@ func (t *TOML) putLine(line string) error {
 	return nil
 }
 
-// update saves the t object into it's parent
-func (t *TOML) update() {
-	if t.parent == nil {
-		return
-	}
-
-	t.parent.kvs[t.key] = value{
-		val: t,
-		t:   InnerStruct,
-	}
-}
-
-func (t *TOML) findOrMakeParent(initial *TOML, fullKey string) {
+func (t *TOML) createObjPath(fullKey string) {
 	keyParts := strings.Split(fullKey, ".")
-	cur := initial
-	for i, k := range keyParts {
+	cur := t
+	for _, k := range keyParts {
 		val, ok := cur.kvs[key(k)]
 		if ok {
-			// the parent is found
-			if i == len(keyParts)-1 {
-				t.parent = cur
-				cur.kvs[key(k)] = value{
-					val: t,
-					t:   InnerStruct,
-				}
-				return
-			}
 			cur = val.val.(*TOML)
 			continue
 		}
-		// no pre-parent found
-		preParent := &TOML{
+		next := &TOML{
 			key:    key(k),
 			parent: cur,
 			kvs:    make(map[key]value),
 		}
 		cur.kvs[key(k)] = value{
-			val: preParent,
+			val: next,
 			t:   InnerStruct,
 		}
-		cur = preParent
+		cur = next
 	}
-	t.parent = cur
 }
 
-func (v value) String(prefix ...string) string {
+func (v value) String() string {
 	switch v.t {
 	case Int:
 		return fmt.Sprint(v.val.(int))
@@ -213,7 +226,7 @@ func (v value) String(prefix ...string) string {
 		// TODO: add \ before special symbols, add quotes
 		return v.val.(string)
 	case InnerStruct:
-		return v.val.(*TOML).String(prefix...)
+		return v.val.(*TOML).String()
 	}
 
 	return ""
@@ -230,23 +243,6 @@ func tidy(s string) string {
 	return s
 }
 
-// actualizeObject checks if a new object is being declared in the line.
-func actualizeObject(obj, initial *TOML, line string) (*TOML, bool) {
-	if line[0] == '[' && line[len(line)-1] == ']' {
-		fullKey := tidy(line[1 : len(line)-1])
-		lastDotIdx := strings.LastIndex(fullKey, ".")
-		actualKey := fullKey
-		if lastDotIdx != -1 {
-			actualKey = fullKey[lastDotIdx+1:]
-		}
-
-		newNode := &TOML{
-			key: key(actualKey),
-			kvs: make(map[key]value),
-		}
-		newNode.findOrMakeParent(initial, fullKey)
-		return newNode, true
-	}
-
-	return obj, false
+func lineIsAnObjectDef(line string) bool {
+	return line[0] == '[' && line[len(line)-1] == ']'
 }
