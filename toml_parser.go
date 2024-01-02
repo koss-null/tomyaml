@@ -128,11 +128,53 @@ func actualizeObject(obj *TOML, line string) *TOML {
 		if lastDotIdx != -1 {
 			actualKey = fullKey[lastDotIdx+1:]
 		}
-		return &TOML{
-			key:    key(actualKey),
-			kvs:    make(map[key]value),
-			parent: findParent(obj, fullKey[:len(fullKey)-len(actualKey)]),
+
+		newNode := &TOML{
+			key: key(actualKey),
+			kvs: make(map[key]value),
 		}
+		newNode.findOrMakeParent(obj, fullKey)
+		return newNode
 	}
+
 	return obj
+}
+
+func (t *TOML) findOrMakeParent(toml *TOML, fullKey string) {
+	// go to the initial parent
+	initial := toml
+	for initial.parent != nil {
+		initial = initial.parent
+	}
+
+	keyParts := strings.Split(fullKey, ".")
+	lastKey := keyParts[len(keyParts)-1]
+	keyParts = keyParts[:len(keyParts)-1]
+	cur := initial
+	for i, k := range keyParts {
+		val, ok := cur.kvs[key(k)]
+		if ok {
+			// the parent is found
+			if i == len(keyParts)-1 {
+				cur.kvs[key(lastKey)] = value{
+					val: t,
+					t:   InnerStruct,
+				}
+				return
+			}
+			cur = val.val.(*TOML)
+			continue
+		}
+		// no pre-parent found
+		preParent := &TOML{
+			key:    key(k),
+			parent: cur,
+			kvs:    make(map[key]value),
+		}
+		cur.kvs[key(k)] = value{
+			val: preParent,
+			t:   InnerStruct,
+		}
+		cur = preParent
+	}
 }
