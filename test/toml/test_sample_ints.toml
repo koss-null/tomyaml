@@ -1,0 +1,24 @@
+# Sample TOML file with nested objects
+// only ints
+
+[person]
+name = 11 // the name is a number
+age =   25 # the age is a number also
+
+[person.address]
+street = 123
+city = 112
+country = 1202
+
+[random_number]
+number = 666
+
+[random_number.inner]
+inner = 999
+
+[person.contact]
+email = 111111
+phone = 999909
+
+[person.contact.triple]
+tripleinner = 3

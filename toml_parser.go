@@ -1,8 +1,9 @@
-package toml
+package tomyaml
 
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -66,7 +67,7 @@ func Parse(tomlFile io.Reader) (TOML, error) {
 		}
 
 		lines[0] = savedPrefix + lines[0]
-		if err = currentObj.handleLines(lines, currentObj, &toml); err != nil {
+		if currentObj, err = currentObj.handleLines(lines, &toml); err != nil {
 			return TOML{}, err
 		}
 
@@ -78,52 +79,107 @@ func Parse(tomlFile io.Reader) (TOML, error) {
 	return toml, nil
 }
 
-// TODO: implement
-func (t *TOML) String() string {
-	return ""
+func (t *TOML) String(prefix ...string) string {
+	pref := strings.Join(prefix, "")
+
+	var bldr strings.Builder
+
+	if t.key != "" {
+		bldr.WriteString(fmt.Sprintf("%s[%s]\n", pref, t.key))
+	}
+
+	for k, v := range t.kvs {
+		if v.t != InnerStruct {
+			bldr.WriteString(fmt.Sprintf("%s%q: %s\n", pref, k, v.String()))
+			continue
+		}
+		bldr.WriteString(string(t.key) + v.String("\t"+pref))
+	}
+
+	return bldr.String()
 }
 
-func (t *TOML) handleLines(lines []string, obj, initial *TOML) error {
+func (t *TOML) handleLines(lines []string, initial *TOML) (*TOML, error) {
+	obj := t
+	objChanged := false
 	for _, line := range lines {
 		line = tidy(line)
 		if len(line) == 0 {
 			continue
 		}
 
-		t.update(obj)
-		obj = actualizeObject(obj, initial, line)
-		if err := obj.putLine(line); err != nil {
-			return err
+		prevObj := obj
+		obj, objChanged = actualizeObject(obj, initial, line)
+		// if the line not like "[some.object]"
+		if objChanged {
+			prevObj.update()
+			continue
 		}
+		if err := obj.putLine(line); err != nil {
+			return obj, err
+		}
+		continue
 	}
 
-	return nil
+	obj.update()
+	return obj, nil
 }
+
+var delimeters = [...]rune{':', '='}
 
 // putLine puts a line into the TOML.
 func (t *TOML) putLine(line string) error {
-	// Implement this function.
+	// find the leftmost delimeter
+	delimeterFound := false
+	delimeterIdx := 0
+	for _, char := range line {
+		for _, delimeter := range delimeters {
+			if char == delimeter {
+				delimeterFound = true
+				break
+			}
+		}
+		if delimeterFound {
+			break
+		}
+		delimeterIdx++
+	}
+
+	if !delimeterFound {
+		return errors.WithStack(fmt.Errorf("no delimeter found on line: %q", line))
+	}
+
+	field := key(tidy(line[:delimeterIdx]))
+	val, _ := strconv.Atoi(tidy(line[delimeterIdx+1:]))
+	t.kvs[field] = value{
+		val: val,
+		t:   Int,
+	}
 	return nil
 }
 
-func (t *TOML) update(obj *TOML) {
-	t.kvs[obj.key] = value{
-		val: obj,
+// update saves the t object into it's parent
+func (t *TOML) update() {
+	if t.parent == nil {
+		return
+	}
+
+	t.parent.kvs[t.key] = value{
+		val: t,
 		t:   InnerStruct,
 	}
 }
 
 func (t *TOML) findOrMakeParent(initial *TOML, fullKey string) {
 	keyParts := strings.Split(fullKey, ".")
-	lastKey := keyParts[len(keyParts)-1]
-	keyParts = keyParts[:len(keyParts)-1]
 	cur := initial
 	for i, k := range keyParts {
 		val, ok := cur.kvs[key(k)]
 		if ok {
 			// the parent is found
 			if i == len(keyParts)-1 {
-				cur.kvs[key(lastKey)] = value{
+				t.parent = cur
+				cur.kvs[key(k)] = value{
 					val: t,
 					t:   InnerStruct,
 				}
@@ -144,9 +200,10 @@ func (t *TOML) findOrMakeParent(initial *TOML, fullKey string) {
 		}
 		cur = preParent
 	}
+	t.parent = cur
 }
 
-func (v value) String() string {
+func (v value) String(prefix ...string) string {
 	switch v.t {
 	case Int:
 		return fmt.Sprint(v.val.(int))
@@ -155,7 +212,10 @@ func (v value) String() string {
 	case String:
 		// TODO: add \ before special symbols, add quotes
 		return v.val.(string)
+	case InnerStruct:
+		return v.val.(*TOML).String(prefix...)
 	}
+
 	return ""
 }
 
@@ -171,7 +231,7 @@ func tidy(s string) string {
 }
 
 // actualizeObject checks if a new object is being declared in the line.
-func actualizeObject(obj, initial *TOML, line string) *TOML {
+func actualizeObject(obj, initial *TOML, line string) (*TOML, bool) {
 	if line[0] == '[' && line[len(line)-1] == ']' {
 		fullKey := tidy(line[1 : len(line)-1])
 		lastDotIdx := strings.LastIndex(fullKey, ".")
@@ -185,8 +245,8 @@ func actualizeObject(obj, initial *TOML, line string) *TOML {
 			kvs: make(map[key]value),
 		}
 		newNode.findOrMakeParent(initial, fullKey)
-		return newNode
+		return newNode, true
 	}
 
-	return obj
+	return obj, false
 }
