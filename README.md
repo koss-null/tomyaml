@@ -1,16 +1,19 @@
+# TomYAML
 
-# TomYamL
+[![Go Report Card](https://goreportcard.com/badge/github.com/koss-null/tomyaml)](https://goreportcard.com/report/github.com/koss-null/tomyaml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Tomyaml is a Golang library aimed at parsing TOML and YAML files into Golang structures. Currently, only TOML parsing is implemented. YAML parsing is underway and will be available soon.
+
+TomYAML is a Golang library designed to parse TOML and YAML files into Golang structures. Presently, only TOML parsing is implemented, while YAML parsing is currently in progress and will be available soon.
 
 ## Supported features
 
 ### TOML
 
- - `Parse(io.Reader) TOML` - parse TOML file from io.Reader into TOML structure.
- - `TOML.Key() string` - returns TOML's object key from root.
- - `TOML.GetObj(key string) TOML` - returns TOML object by the key from the root (key eg.: foo.bar.baz).
- - `TOML.String() string` - returns TOML file as a string, built from a TOML structure.
+ - `Parse(io.Reader) TOML` - Parses a TOML file from an `io.Reader` into a `TOML` structure.
+ - `TOML.Key() string` - Returns the object key of the TOML from the root.
+ - `TOML.GetObj(key string) TOML` - Retrieves the `TOML` object by the specified key from the root (e.g., foo.bar.baz).
+ - `TOML.String() string` - Returns the TOML file as a string, constructed from a `TOML` structure.
  *Currently parsing supports:*
  - comments with `//` and `#`
  - key-value separators with `:`, `=`
@@ -29,7 +32,7 @@ To install Tomyaml, use `go get`:
 go get github.com/koss-null/tomyaml
 ```
 
-or just import it in your project and say: 
+Alternatively, import it into your project and run: 
 ```bash
 go mod tidy
 ```
