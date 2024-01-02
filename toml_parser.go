@@ -93,7 +93,7 @@ func (t *TOML) String(prefix ...string) string {
 			bldr.WriteString(fmt.Sprintf("%s%q: %s\n", pref, k, v.String()))
 			continue
 		}
-		bldr.WriteString(string(t.key) + v.String("\t"+pref))
+		bldr.WriteString(v.String("\t" + pref))
 	}
 
 	return bldr.String()
