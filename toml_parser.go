@@ -3,6 +3,7 @@ package tomyaml
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -29,10 +30,10 @@ type (
 )
 
 const (
-	Unknown         ValueType = 0
+	Unknown     ValueType = 0
 	Int         ValueType = 1
 	Float       ValueType = 2
-	Boolean       ValueType = 3
+	Boolean     ValueType = 3
 	String      ValueType = 4
 	Array       ValueType = 5
 	Table       ValueType = 6
@@ -130,7 +131,7 @@ func (t *TOML) String() string {
 
 	for k, v := range t.kvs {
 		if v.t != InnerStruct {
-			bldr.WriteString(fmt.Sprintf("%q: %s\n", k, v.String()))
+			bldr.WriteString(fmt.Sprintf("%s: %s\n", k, v.String()))
 			continue
 		}
 	}
@@ -194,12 +195,12 @@ func (t *TOML) putLine(line string) error {
 	}
 
 	field := key(tidy(line[:delimeterIdx]))
-	val, err := parseTOMLValue(tidy(line[delimeterIdx+1:])))
-    if err != nil {
-        return err
-    }
+	val, err := parseTOMLValue(tidy(line[delimeterIdx+1:]))
+	if err != nil {
+		return err
+	}
 	t.kvs[field] = val
-    return nil
+	return nil
 }
 
 func (t *TOML) createObjPath(fullKey string) {
@@ -240,8 +241,8 @@ func (v value) String() string {
 		return fmt.Sprint(v.val.(int))
 	case Float:
 		return fmt.Sprint(v.val.(float64))
-    case Boolean:
-        return fmt.Sprint(v.val.(bool))
+	case Boolean:
+		return fmt.Sprint(v.val.(bool))
 	case String:
 		strWithEscSymvols := escapedString.Replace(v.val.(string))
 		return "\"" + strWithEscSymvols + "\""
@@ -258,37 +259,59 @@ func (v value) String() string {
 	return "TYPE NOT KNOWN"
 }
 
-
-var(
-    integerPattern = regexp.MustCompile(`^-?\d+$`)
-	floatPattern = regexp.MustCompile(`^-?\d+\.\d+$`)
+var (
+	integerPattern = regexp.MustCompile(`^-?\d+$`)
+	floatPattern   = regexp.MustCompile(`^-?\d+\.\d+$`)
 	booleanPattern = regexp.MustCompile(`^(true|false|True|False|TRUE|FALSE)$`)
-	stringPattern = regexp.MustCompile(`^".*"$`)
-	arrayPattern = regexp.MustCompile(`^\[.*\]$`)
-	tablePattern = regexp.MustCompile(`^\[.*\]$`)
+	stringPattern  = regexp.MustCompile(`^".*"$`)
+	arrayPattern   = regexp.MustCompile(`^\[.*\]$`)
+	tablePattern   = regexp.MustCompile(`^\[.*\]$`)
+
+	trueVals = [...]string{"true", "True", "TRUE"}
 )
 
 func parseTOMLValue(valStr string) (value, error) {
-    var res value
+	var res value
 	switch {
 	case integerPattern.MatchString(valStr):
-        res.t = Int
+		valueInt, err := strconv.Atoi(valStr)
+		if err != nil {
+			return value{}, errors.WithStack(err)
+		}
+		res.val = valueInt
+		res.t = Int
 	case floatPattern.MatchString(valStr):
-        res.t = Float
+		valueFloat, err := strconv.ParseFloat(valStr, 64)
+		if err != nil {
+			return value{}, errors.WithStack(err)
+		}
+		res.val = valueFloat
+		res.t = Float
 	case booleanPattern.MatchString(valStr):
-        res.t = Boolean
+		res.val = false
+		for _, v := range trueVals {
+			if v == valStr {
+				res.val = true
+			}
+		}
+		res.t = Boolean
 	case stringPattern.MatchString(valStr):
-        res.t = String
+		parsedString, err := strconv.Unquote(valStr)
+		if err != nil {
+			return value{}, errors.WithStack(err)
+		}
+		res.val = parsedString
+		res.t = String
 	case arrayPattern.MatchString(valStr):
-        res.t = Array
+		res.t = Array
 	case tablePattern.MatchString(valStr):
-        res.t = Table
+		res.t = Table
 	}
 
-    if res.t == Unknown {
-    return value{}, errors.WithStack(fmt.Errorf("unable to parse the value %q into any of known toml types", valStr))
-    }
-    return res, nil
+	if res.t == Unknown {
+		return value{}, errors.WithStack(fmt.Errorf("unable to parse the value %q into any of known toml types", valStr))
+	}
+	return res, nil
 }
 
 var commentSigns = [...]string{"//", "#"}

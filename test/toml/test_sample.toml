@@ -1,0 +1,30 @@
+# Example TOML file for testing purposes
+
+// String values
+name = "John Doe"
+description = "This is a sample description"
+
+// Integer values
+age: 30
+employee_id: 12345
+
+// Float values
+pi_value: 3.14159
+temperature: 25.5
+
+// Boolean values
+is_active: true
+is_working: FALSE
+
+// Nested objects
+[address]
+  street = "123 Main Street"   # this comment does not count
+  city = "Anytown" // this comment does not count
+
+[contact]
+  email = "john.doe@example.com"
+  phone = "123-456-7890"
+
+[contact.personal_info]
+  nickname = "shreader{}''\"!"
+

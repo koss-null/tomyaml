@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	file, err := os.Open("./test_sample_ints.toml")
+	file, err := os.Open("./test_sample.toml")
 	if err != nil {
 		panic(err)
 	}
