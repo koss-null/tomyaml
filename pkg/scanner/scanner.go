@@ -1,4 +1,4 @@
-package lexer
+package scanner
 
 import (
 	"io"
@@ -16,17 +16,17 @@ var (
 	newLine    = [...]string{"\n", "\r\n"}
 )
 
-type Lexema string
-
-// Parse returns all lexemas from a file into a chan Lexema one-by-one.
-func Parse(tomlFile io.Reader) (<-chan Lexema, <-chan error) {
+// Scan returns all words from a file into a chan string one-by-one.
+func Scan(file io.Reader) (<-chan string, <-chan error) {
 	buffer := make([]byte, bufferSizeBytes)
 
-	lexemas, errorCh := make(chan Lexema), make(chan error)
+	words, errorCh := make(chan string), make(chan error)
 
 	go func() {
+		defer close(errorCh)
+		defer close(words)
 		for eofFound := false; !eofFound; {
-			n, err := tomlFile.Read(buffer)
+			n, err := file.Read(buffer)
 			if err == io.EOF || n < bufferSizeBytes {
 				// no need to return in this case since we need to parse the last savedPrefix line
 				err = nil
@@ -59,12 +59,12 @@ func Parse(tomlFile io.Reader) (<-chan Lexema, <-chan error) {
 				return false
 			}
 			for _, line := range lines {
-				for _, lx := range strings.FieldsFunc(line, isSpace) {
-					lexemas <- Lexema(lx)
+				for _, wrd := range strings.FieldsFunc(line, isSpace) {
+					words <- wrd
 				}
 			}
 		}
 	}()
 
-	return lexemas, errorCh
+	return words, errorCh
 }
