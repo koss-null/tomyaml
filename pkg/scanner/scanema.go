@@ -1,98 +1,128 @@
 package scanner
 
-import (
-	"strings"
-	"unicode/utf8"
-)
-
-type ScanemaType int
+type ScanemaType byte
 
 const (
+	ScanemaTypeEmpty         ScanemaType = 0
 	ScanemaTypeCommonWord    ScanemaType = 1
 	ScanemaTypeSpecialSymbol ScanemaType = 2
-	ScanemaTypeEOLWord       ScanemaType = 3
+	ScanemaTypeEOL           ScanemaType = 3
 )
 
+// Scanema is a valid utf-8 minimal string token
 type Scanema struct {
-	Content string
+	Content []byte
 	ScanemaType
 }
 
-type SpecialSymbol string
+type SpecialSymbol []byte
 
-const (
-	Tab        SpecialSymbol = "\t"
-	Space      SpecialSymbol = " "
-	NewLine    SpecialSymbol = "\n"
-	WinNewLine SpecialSymbol = "\r\n"
+var (
+	Tab        SpecialSymbol = []byte{'\t'}
+	Space      SpecialSymbol = []byte{' '}
+	NewLine    SpecialSymbol = []byte{'\n'}
+	WinNewLine SpecialSymbol = []byte{'\r', '\n'}
 )
 
 var (
-	whitespaceSymbols = []SpecialSymbol{Tab, Space}
-	newLineSymbols    = []SpecialSymbol{NewLine, WinNewLine}
+	whitespaceSymbols          = []SpecialSymbol{Tab, Space}
+	newLineSymbols             = []SpecialSymbol{NewLine}
+	doubleSymbolNewLineSymbols = []SpecialSymbol{WinNewLine}
 )
 
-func parseScanemas(lines string) []Scanema {
+// parseScanemas returns the slice of parsed scanemas and a slice of bytes that are not parsed
+// (so the end of the scanema is expected in the next lines)
+func parseScanemas(lines []byte) ([]Scanema, []byte) {
 	scnStart, scnEnd := 0, 0
-	scanemas := make([]Scanema, 1)
+	var prevByte *byte
+	// FIXME: 64
+	scanemas := make([]Scanema, 0, 64)
 	for {
-		// last word in lines
-		if len(lines) >= scnEnd {
-			word := lines[scnStart:]
-			return append(scanemas, Scanema{
-				Content:     word,
-				ScanemaType: getScanemaType(word),
-			})
+		// last scanema in lines
+		if scnEnd >= len(lines) {
+			return scanemas, lines[scnStart:]
 		}
 
-		runeVal, width := utf8.DecodeRuneInString(lines[scnEnd:])
-		scnEnd += width
+		curByte := lines[scnEnd]
+		scnEnd++
 
 		switch {
-		case in(runeVal, whitespaceSymbols):
+		case in([]byte{curByte}, whitespaceSymbols):
+			if scnEnd-scnStart > 1 {
+				// append prev scanema as a common word
+				scanemas = append(scanemas, Scanema{
+					Content:     lines[scnStart : scnEnd-1],
+					ScanemaType: ScanemaTypeCommonWord,
+				})
+			}
+			// append current symbol as a space scanema
 			scanemas = append(scanemas, Scanema{
-				Content:     lines[scnStart:scnEnd],
-				ScanemaType: ScanemaTypeCommonWord,
-			})
-			scanemas = append(scanemas, Scanema{
-				Content:     string(runeVal),
+				Content:     []byte(string(curByte)),
 				ScanemaType: ScanemaTypeSpecialSymbol,
+			})
+			scnStart = scnEnd
+			// multiple bytes new line
+		case prevByte != nil && in([]byte{*prevByte, curByte}, doubleSymbolNewLineSymbols):
+			// append prev scanema as common word
+			if scnEnd-scnStart > 2 {
+				scanemas = append(scanemas, Scanema{
+					Content:     lines[scnStart : scnEnd-2],
+					ScanemaType: ScanemaTypeCommonWord,
+				})
+			}
+			// append current symbol
+			scanemas = append(scanemas, Scanema{
+				Content:     lines[scnEnd-2 : scnEnd],
+				ScanemaType: ScanemaTypeEOL,
 			})
 			scnStart = scnEnd
 
-		case in(runeVal, newLineSymbols):
+		// single byte new line
+		case in([]byte{curByte}, newLineSymbols):
+			if scnEnd-scnStart > 1 {
+				// append prev scanema as common word
+				scanemas = append(scanemas, Scanema{
+					Content:     lines[scnStart : scnEnd-1],
+					ScanemaType: ScanemaTypeCommonWord,
+				})
+			}
+			// append current symbol
 			scanemas = append(scanemas, Scanema{
-				Content:     lines[scnStart:scnEnd],
-				ScanemaType: ScanemaTypeEOLWord,
-			})
-			scanemas = append(scanemas, Scanema{
-				Content:     string(NewLine),
-				ScanemaType: ScanemaTypeSpecialSymbol,
+				Content:     []byte(string(curByte)),
+				ScanemaType: ScanemaTypeEOL,
 			})
 			scnStart = scnEnd
 		}
+		prevByte = &curByte
 	}
 }
 
 func getScanemaType(word string) ScanemaType {
 	if len(word) == 0 {
-		return ScanemaTypeCommonWord
+		return ScanemaTypeEmpty
 	}
 
-	// this step is not necessary for now, but may be useful to
-	// escape some mistakes to be made on this func change
-	if in(rune(word[len(word)-1]), whitespaceSymbols) {
+	runeWord := []byte(word)
+	switch {
+	case in(runeWord, whitespaceSymbols):
+		return ScanemaTypeCommonWord
+	case in(runeWord, newLineSymbols), in(runeWord, doubleSymbolNewLineSymbols):
+		return ScanemaTypeEOL
+	default:
 		return ScanemaTypeCommonWord
 	}
-	if strings.HasSuffix(word, string(NewLine)) || strings.HasSuffix(word, string(WinNewLine)) {
-		return ScanemaTypeEOLWord
-	}
-	return ScanemaTypeCommonWord
 }
 
-func in(toFind rune, searchTargets []SpecialSymbol) bool {
-	for i := range searchTargets {
-		if strings.ContainsRune(string(searchTargets[i]), toFind) {
+func in(toFind []byte, searchTargets []SpecialSymbol) bool {
+	for _, st := range searchTargets {
+		found := true
+		for i := range toFind {
+			if len(st) != len(toFind) || toFind[i] != st[i] {
+				found = false
+				break
+			}
+		}
+		if found {
 			return true
 		}
 	}
