@@ -3,6 +3,8 @@ package tomyaml
 import (
 	"fmt"
 	"io"
+	"os"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,29 +19,6 @@ type TOML struct {
 	kvs    map[key]value
 	parent *TOML
 }
-
-type (
-	value struct {
-		val any
-		t   ValueType
-	}
-
-	key string
-
-	ValueType int16
-)
-
-const (
-	Unknown     ValueType = 0
-	Int         ValueType = 1
-	Float       ValueType = 2
-	Boolean     ValueType = 3
-	String      ValueType = 4
-	Array       ValueType = 5
-	Table       ValueType = 6
-	Datetime    ValueType = 7
-	InnerStruct ValueType = 8
-)
 
 // Parse reads from a TOML file and returns a TomlObj.
 func Parse(tomlFile io.Reader) (TOML, error) {
@@ -81,6 +60,30 @@ func Parse(tomlFile io.Reader) (TOML, error) {
 	}
 
 	return toml, nil
+}
+
+// Parse reads from a TOML file and unmarshalls it to the provided objects.
+// The fileds are recognized by "toml:" field tag
+func ParseToObj[T any](file *os.File, obj *T) (*T, error) {
+	toml, err := Parse(file)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := 0; i < reflect.TypeOf(*obj).NumField(); i++ {
+		fld := reflect.TypeOf(*obj).Field(i)
+		tomlTag := fld.Tag.Get("toml")
+		if tomlTag == "" {
+			continue
+		}
+
+		val := toml.GetObj(tomlTag)
+		if val == nil && fld.Type.Kind() != reflect.Pointer {
+			return nil, errors.New("parsed file doesn't contain required object field")
+		}
+		if fld.Type.AssignableTo(reflect.TypeOf(val))() {
+		}
+	}
 }
 
 // Key returns the full key of the toml object: foo.bar.baz
@@ -233,6 +236,29 @@ var escapedString = strings.NewReplacer(
 	`)`, `\)`,
 	`|`, `\|`,
 	`"`, `\"`,
+)
+
+type (
+	value struct {
+		val any
+		t   ValueType
+	}
+
+	key string
+
+	ValueType int16
+)
+
+const (
+	Unknown     ValueType = 0
+	Int         ValueType = 1
+	Float       ValueType = 2
+	Boolean     ValueType = 3
+	String      ValueType = 4
+	Array       ValueType = 5
+	Table       ValueType = 6
+	Datetime    ValueType = 7
+	InnerStruct ValueType = 8
 )
 
 func (v value) String() string {
